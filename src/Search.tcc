@@ -1129,7 +1129,7 @@ bool CompactedDBG<U, G>::search(const vector<string>& query_filenames, const str
 
     outfile.open(out_tmp.c_str());
     out.rdbuf(outfile.rdbuf());
-    out.sync_with_stdio(false);
+    //out.sync_with_stdio(false);
 
     const char query_pres[3] = {'\t', '1', '\n'};
     const char query_abs[3] = {'\t', '0', '\n'};
@@ -1244,7 +1244,7 @@ bool CompactedDBG<U, G>::search(const vector<string>& query_filenames, const str
 
                                     buffer_sz += s.length();
 
-                                    buffers_seq[t].push_back(move(s));
+                                    buffers_seq[t].push_back(std::move(s));
                                     buffers_name[t].push_back(string(fp.getNameString()));
 
                                     if (buffer_sz >= thread_seq_buf_sz) break;

@@ -791,7 +791,7 @@ inline void ColoredCDBG<void>::resizeDataUC(const size_t sz, const size_t nb_thr
                             const pair<DataAccessor<void>, pair<UnitigColors*, void*>> p  = new_ds.insert(*it_unitig);
 
                             *(it_unitig->getData()) = p.first;
-                            *(p.second.first) = move(*uc);
+                            *(p.second.first) = std::move(*uc);
                         }
                     }
                 }
@@ -801,7 +801,7 @@ inline void ColoredCDBG<void>::resizeDataUC(const size_t sz, const size_t nb_thr
 
     for (auto& t : workers) t.join();
 
-    *ds = move(new_ds);
+    *ds = std::move(new_ds);
 
     //cout << "Number of unitigs not hashed is " << ds->overflow.size() << " on " << ds->nb_cs << " unitigs." << endl;
 }
@@ -965,10 +965,6 @@ void ColoredCDBG<U>::buildUnitigColors(const size_t nb_threads){
 
         size_t prev_uc_sz = getCurrentRSS();
 
-        char* buffer_seq = new char[nb_threads * thread_seq_buf_sz];
-        size_t* buffer_seq_sz = new size_t[nb_threads];
-        size_t* buffer_col = new size_t[nb_threads * thread_col_buf_sz];
-
         while (next_file){
 
             stop = false;
@@ -979,18 +975,32 @@ void ColoredCDBG<U>::buildUnitigColors(const size_t nb_threads){
 
                     [&, t]{
 
+                        char* buffer_seq = new char[thread_seq_buf_sz];
+                        size_t* buffer_col = new size_t[thread_col_buf_sz];
+
+                        size_t buffer_seq_sz = 0;
+
                         while (true) {
 
                             {
                                 unique_lock<mutex> lock(mutex_file);
 
-                                if (stop) return;
+                                if (stop) {
 
-                                stop = reading_function(&buffer_seq[t * thread_seq_buf_sz], buffer_seq_sz[t], &buffer_col[t * thread_col_buf_sz]);
+                                    delete[] buffer_seq;
+                                    delete[] buffer_col;
+
+                                    return;
+                                }
+
+                                stop = reading_function(buffer_seq, buffer_seq_sz, buffer_col);
                             }
 
-                            worker_function(&buffer_seq[t * thread_seq_buf_sz], buffer_seq_sz[t], &buffer_col[t * thread_col_buf_sz]);
+                            worker_function(buffer_seq, buffer_seq_sz, buffer_col);
                         }
+
+                        delete[] buffer_seq;
+                        delete[] buffer_col;
                     }
                 );
             }
@@ -1050,10 +1060,6 @@ void ColoredCDBG<U>::buildUnitigColors(const size_t nb_threads){
                 prev_uc_sz = getCurrentRSS();
             }
         }
-
-        delete[] buffer_seq;
-        delete[] buffer_seq_sz;
-        delete[] buffer_col;
     }
 
     fp.close();
@@ -1333,7 +1339,7 @@ bool ColoredCDBG<U>::search(const vector<string>& query_filenames, const string&
 
     outfile.open(out_tmp.c_str());
     out.rdbuf(outfile.rdbuf());
-    out.sync_with_stdio(false);
+    //out.sync_with_stdio(false);
 
     const char query_pres[2] = {'\t', '1'};
     const char query_abs[2] = {'\t', '0'};

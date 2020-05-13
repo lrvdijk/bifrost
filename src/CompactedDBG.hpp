@@ -27,6 +27,7 @@
 #include "FASTX_Parser.hpp"
 #include "GFA_Parser.hpp"
 #include "Kmer.hpp"
+#include "KmerCovIndex.hpp"
 #include "KmerHashTable.hpp"
 #include "KmerIterator.hpp"
 #include "KmerStream.hpp"
@@ -316,6 +317,8 @@ class CompactedDBG {
         template<typename U, typename G, bool is_const> friend class unitigIterator;
         template<typename U, typename G, bool is_const> friend class neighborIterator;
 
+        template<typename X, typename Y> friend class CompactedDBG;
+
         typedef unitigIterator<U, G, false> iterator; /**< An iterator for the unitigs of the graph. No specific order is assumed. */
         typedef unitigIterator<U, G, true> const_iterator; /**< A constant iterator for the unitigs of the graph. No specific order is assumed. */
 
@@ -335,14 +338,14 @@ class CompactedDBG {
         * de Bruijn graph is copied.  After the call to this function, the same graph exists twice in memory.
         * @param o is a constant reference to the compacted de Bruijn graph to copy.
         */
-        CompactedDBG(const CompactedDBG& o); // Copy constructor
+        CompactedDBG(const CompactedDBG<U, G>& o); // Copy constructor
 
         /** Move constructor (move a compacted de Bruijn graph).
         * The content of o is moved ("transfered") to a new compacted de Bruijn graph.
         * The compacted de Bruijn graph referenced by o will be empty after the call to this constructor.
         * @param o is a reference on a reference to the compacted de Bruijn graph to move.
         */
-        CompactedDBG(CompactedDBG&& o); // Move constructor
+        CompactedDBG(CompactedDBG<U, G>&& o); // Move constructor
 
         /** Destructor.
         */
@@ -354,7 +357,7 @@ class CompactedDBG {
         * @param o is a constant reference to the compacted de Bruijn graph to copy.
         * @return a reference to the compacted de Bruijn which is the copy.
         */
-        CompactedDBG<U, G>& operator=(const CompactedDBG& o);
+        CompactedDBG<U, G>& operator=(const CompactedDBG<U, G>& o);
 
         /** Move assignment operator (move a compacted de Bruijn graph).
         * The content of o is moved ("transfered") to a new compacted de Bruijn graph.
@@ -362,7 +365,7 @@ class CompactedDBG {
         * @param o is a reference on a reference to the compacted de Bruijn graph to move.
         * @return a reference to the compacted de Bruijn which has (and owns) the content of o.
         */
-        CompactedDBG<U, G>& operator=(CompactedDBG&& o);
+        CompactedDBG<U, G>& operator=(CompactedDBG<U, G>&& o);
 
         /** Addition assignment operator (merge a compacted de Bruijn graph).
         * After merging, all unitigs of o have been added to and compacted with the current compacted de Bruijn graph (this).
@@ -375,19 +378,19 @@ class CompactedDBG {
         * @param o is a constant reference to the compacted de Bruijn graph to merge.
         * @return a reference to the current compacted de Bruijn after merging.
         */
-        CompactedDBG<U, G>& operator+=(const CompactedDBG& o);
+        CompactedDBG<U, G>& operator+=(const CompactedDBG<U, G>& o);
 
         /** Equality operator.
         * @return a boolean indicating if two compacted de Bruijn graphs have the same unitigs (does not compare the data
         * associated with the unitigs).
         */
-        bool operator==(const CompactedDBG& o) const;
+        bool operator==(const CompactedDBG<U, G>& o) const;
 
         /** Inequality operator.
         * @return a boolean indicating if two compacted de Bruijn graphs have different unitigs (does not compare the data
         * associated with the unitigs).
         */
-        inline bool operator!=(const CompactedDBG& o) const;
+        inline bool operator!=(const CompactedDBG<U, G>& o) const;
 
         /** Clear the graph: empty the graph and reset its parameters.
         */
@@ -577,10 +580,15 @@ class CompactedDBG {
         */
         inline int getK() const { return k_; }
 
+        /** Return the length of minimizers of the graph.
+        * @return Length of minimizers of the graph.
+        */
+        inline int getG() const { return g_; }
+
         /** Return the number of unitigs in the graph.
         * @return Number of unitigs in the graph.
         */
-        inline size_t size() const { return v_unitigs.size() + v_kmers.size() + h_kmers_ccov.size(); }
+        inline size_t size() const { return v_unitigs.size() + km_unitigs.size() + h_kmers_ccov.size(); }
 
         /** Return a pointer to the graph data. Pointer is nullptr if type of graph data is void.
         * @return A pointer to the graph data. Pointer is nullptr if type of graph data is void.
@@ -613,6 +621,8 @@ class CompactedDBG {
 
     private:
 
+        CompactedDBG<U, G>& toDataGraph(CompactedDBG<void, void>&& o, const size_t nb_threads = 1);
+
         bool filter(const CDBG_Build_opt& opt, const size_t nb_unique_kmers, const size_t nb_non_unique_kmers);
         bool construct(const CDBG_Build_opt& opt, const size_t nb_unique_minimizers, const size_t nb_non_unique_minimizers);
 
@@ -625,7 +635,7 @@ class CompactedDBG {
         inline size_t find(const preAllocMinHashIterator<RepHash>& it_min_h) const {
 
             const int pos = it_min_h.getPosition();
-            return (hmap_min_unitigs.find(Minimizer(&it_min_h.s[pos]).rep()) != hmap_min_unitigs.end() ? 0 : pos - it_min_h.p);
+            return (hmap_min_unitigs.find(Minimizer(it_min_h.s + pos).rep()) != hmap_min_unitigs.end() ? 0 : pos - it_min_h.p);
         }
 
         UnitigMap<U, G> find(const char* s, const size_t pos_km, const minHashIterator<RepHash>& it_min, const bool extremities_only = false);
@@ -689,8 +699,11 @@ class CompactedDBG {
         typename std::enable_if<is_void, size_t>::type joinUnitigs_(vector<Kmer>* v_joins = nullptr, const size_t nb_threads = 1);
 
         void moveToAbundant();
+        void setFullCoverage(const size_t cov) const;
 
         void createJoinHT(vector<Kmer>* v_joins, KmerHashTable<Kmer>& joins, const size_t nb_threads) const;
+        void createJoinHT(vector<Kmer>* v_joins, KmerHashTable<char>& joins, const size_t nb_threads) const;
+
         bool checkJoin(const Kmer& a, const const_UnitigMap<U, G>& cm_a, Kmer& b) const;
         void check_fp_tips(KmerHashTable<bool>& ignored_km_tips);
         size_t removeUnitigs(bool rmIsolated, bool clipTips, vector<Kmer>& v);
@@ -711,7 +724,9 @@ class CompactedDBG {
 
         void mapRead(const const_UnitigMap<U, G>& um);
         void mapRead(const const_UnitigMap<U, G>& um, LockGraph& lck_g);
+
         void unmapRead(const const_UnitigMap<U, G>& um);
+        void unmapRead(const const_UnitigMap<U, G>& um, LockGraph& lck_g);
 
         void setKmerGmerLength(const int kmer_length, const int minimizer_length = -1);
         void print() const;
@@ -734,8 +749,8 @@ class CompactedDBG {
         typedef KmerHashTable<CompressedCoverage_t<U>> h_kmers_ccov_t;
 
         vector<Unitig<U>*> v_unitigs;
-        vector<pair<Kmer, CompressedCoverage_t<U>>> v_kmers;
 
+        KmerCovIndex<U> km_unitigs;
         MinimizerIndex hmap_min_unitigs;
 
         h_kmers_ccov_t h_kmers_ccov;
