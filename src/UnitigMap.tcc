@@ -67,6 +67,10 @@ string UnitigMap<U, G, is_const>::referenceUnitigToString() const {
 template<typename U, typename G, bool is_const>
 UnitigMap<U, G, is_const> UnitigMap<U, G, is_const>::mappingToFullUnitig() const {
     UnitigMap<U, G, is_const> cpy(*this);
+    if(isEmpty) {
+        return cpy;
+    }
+
     cpy.dist = 0;
     cpy.len = size - cdbg->getK() + 1;
 
@@ -75,7 +79,12 @@ UnitigMap<U, G, is_const> UnitigMap<U, G, is_const>::mappingToFullUnitig() const
 
 template<typename U, typename G, bool is_const>
 bool UnitigMap<U, G, is_const>::isFullMapping() const {
-    return !isEmpty && dist == 0 && len == size - getGraph()->getK() + 1;
+    if(isEmpty) {
+        return false;
+    }
+
+    size_t unitig_num_kmers = size - getGraph()->getK() + 1;
+    return len == unitig_num_kmers;
 }
 
 template<typename U, typename G, bool is_const>
