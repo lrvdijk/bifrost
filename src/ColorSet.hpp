@@ -121,7 +121,12 @@ class UnitigColors {
                 */
                 bool operator!=(const UnitigColors_const_iterator& o) const;
 
-            private:
+                inline bool isInvalid() const {
+
+                    return ((ck_id == 0xffffffffffffffff) || (it_setBits == cs_sz));
+                }
+
+        private:
 
                 const UnitigColors* cs;
 
@@ -149,10 +154,6 @@ class UnitigColors {
 
                 inline uint64_t get_ID() const { return ck_id; }
 
-                inline bool isInvalid() const {
-
-                    return ((ck_id == 0xffffffffffffffff) || (it_setBits == cs_sz));
-                }
         };
 
         /**
