@@ -50,8 +50,8 @@ string UnitigMap<U, G, is_const>::mappedSequenceToString() const {
         if (isShort) return cdbg->km_unitigs.getKmer(pos_unitig).twin().toString();
         if (isAbundant) return cdbg->h_kmers_ccov.find(pos_unitig).getKey().twin().toString();
 
-        size_t start = size - dist - cdbg->k_;
-        return cdbg->v_unitigs[pos_unitig]->getSeq().rev().toString(start, len + cdbg->k_ - 1);
+        size_t start = size - cdbg->k_ - len + 1;
+        return reverse_complement(cdbg->v_unitigs[pos_unitig]->getSeq().toString(start, len + cdbg->k_ - 1));
     }
 }
 
@@ -73,7 +73,7 @@ UnitigMap<U, G, is_const> UnitigMap<U, G, is_const>::mappingToFullUnitig() const
     }
 
     cpy.len = size - cdbg->getK() + 1;
-    cpy.dist = strand ? 0 : cpy.len - 1;
+    cpy.dist = 0;
 
     return cpy;
 }
